@@ -1,5 +1,5 @@
 <!DOCTYPE CrossStudio_Project_File>
-<solution Name="lab5_wc" version="2" target="8">
+<solution Name="lab5_wc" target="8" version="2">
   <configuration
     Name="Debug"
     c_preprocessor_definitions="DEBUG"
@@ -64,9 +64,13 @@
       <file file_name="STM32L432KC_FLASH.c" />
       <file file_name="STM32L432KC_FLASH.h" />
       <file file_name="STM32L432KC_GPIO.c" />
-      <file file_name="STM32L432KC_GPIO.h" />
+      <file file_name="STM32L432KC_GPIO.h">
+        <configuration Name="Debug" build_exclude_from_build="No" />
+      </file>
       <file file_name="STM32L432KC_RCC.c" />
-      <file file_name="STM32L432KC_RCC.h" />
+      <file file_name="STM32L432KC_RCC.h">
+        <configuration Name="Debug" build_exclude_from_build="No" />
+      </file>
       <file file_name="STM32L432KC_SPI.c" />
       <file file_name="STM32L432KC_SPI.h" />
       <file file_name="STM32L432KC_TIM.c" />

@@ -18,14 +18,23 @@ Date    : October 2025
 #include "STM32L432KC.h"
 #include <stm32l432xx.h>
 
-#define SIGNAL_A PA2
-#define SIGNAL_B PA3    // TODO: replace with real pin values
-#define TOT_ROT 120     // total number of pulses to make 1 rotation
-#define TIMER TIM16
+#define SIGNAL_A PA1    // A1
+#define SIGNAL_B PA2    // A7
+#define TOT_ROT 408     // PPR (total number of pulses to make 1 rotation)
+#define TIMER TIM6
 
 int counter     = 0;
 int clockwise   = 0;
-int timer_count = 0;
+int timer_count = 1;
+
+// Function used by printf to send characters to the laptop
+int _write(int file, char *ptr, int len) {
+  int i = 0;
+  for (i = 0; i < len; i++) {
+    ITM_SendChar((*ptr++));
+  }
+  return len;
+}
 
 /*********************************************************************
  *
@@ -35,108 +44,123 @@ int timer_count = 0;
  *   Application entry point.
  */
 int main(void) {
-  // set up timers/counters, GPIO pins (x2)
 
-  // flash, clock
-  configureClock();    // SYS_CLK runs at 80MHz
-  configureFlash();
-  // divide clock down??
   counter = 0;    // initialize counter to 0
 
   // enable pins
   gpioEnable(GPIO_PORT_A);
   pinMode(SIGNAL_A, GPIO_INPUT);
   pinMode(SIGNAL_B, GPIO_INPUT);
+  GPIOA->PUPDR |= _VAL2FLD(GPIO_PUPDR_PUPD1, 0b01);    // Set PA1 as pull-up
   GPIOA->PUPDR |= _VAL2FLD(GPIO_PUPDR_PUPD2, 0b01);    // Set PA2 as pull-up
 
-  // initialize timer 16
+  // initialize timers
   // TODO: which timer do I want enabled?
-  RCC->APB2ENR |= RCC_APB2ENR_TIM16EN;
-  initTIM(TIMER);
+  RCC->APB1ENR1 |= RCC_APB1ENR1_TIM6EN;
+  RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
+  initTIM(TIMER); //initialized to run in milliseconds
+  initTIM(TIM2); 
 
   // 1. Enable SYSCFG clock domain in RCC
   RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
 
   // 2. Configure EXTICR for the input button interrupt
+  SYSCFG->EXTICR[1] |= _VAL2FLD(SYSCFG_EXTICR1_EXTI1, 0b000);    // Select PA1
   SYSCFG->EXTICR[1] |= _VAL2FLD(SYSCFG_EXTICR1_EXTI2, 0b000);    // Select PA2
-  SYSCFG->EXTICR[1] |= _VAL2FLD(SYSCFG_EXTICR1_EXTI3, 0b000);    // Select PA3
 
-                                                                 // Enable interrupts globally
-  __enable_irq();
+  __enable_irq(); // Enable interrupts globally
 
-  // configure mask but
+  // configure mask bit
+  EXTI->IMR1 |= (1 << gpioPinOffset(SIGNAL_A)); 
+  EXTI->IMR1 |= (1 << gpioPinOffset(SIGNAL_B));
+
   //  enable rising edge trigger for both
   EXTI->RTSR1 |= (1 << gpioPinOffset(SIGNAL_A));
   EXTI->RTSR1 |= (1 << gpioPinOffset(SIGNAL_B));
 
   // enable falling edge trigger for both
-  EXTI->FTSR1 |= (1 << gpioPinOffset(SIGNAL_A));    // Enable falling edge trigger
-  EXTI->FTSR1 |= (1 << gpioPinOffset(SIGNAL_B));    // Enable falling edge trigger
-  // turn on EXTI2 and EXTI3 interrupt in NVIC_ISER
+  EXTI->FTSR1 |= (1 << gpioPinOffset(SIGNAL_A));
+  EXTI->FTSR1 |= (1 << gpioPinOffset(SIGNAL_B));
+
+  // turn on EXTI1 and EXTI2 interrupt in NVIC_ISER
   // TODO: is this correct?
-  NVIC->ISER[0] |= (1 << EXTI2_IRQn);    // SEND BOTH TO THE SAME INTERRUPT HANDLER
+  NVIC->ISER[0] |= (1 << EXTI1_IRQn);    // SEND BOTH TO THE SAME INTERRUPT HANDLER
   NVIC->ISER[0] |= (1 << EXTI2_IRQn);
 
-  // TODO: IRQ handler: if interrupt triggered, increment counter
-  // check correct interrupt
-  // clear interrupt
-  // increment counter
-  // TODO: just one counter variable ?
-
-  // run for a certain amount of time (divide)
-  // implement decoder algorithm
-
-  float speed;
+  float speed = 0;
   while (1) {
+    printf("hello");
     // calculate speed using whatever value is in timer
-    speed = 1.0/(TOT_ROT*((4.0*timer_count))); //TODO: ADJUST SPEED CALCS
+    speed = 1.0 / (TOT_ROT * ((4.0 * timer_count *1000.0)));    // TODO: ADJUST SPEED CALCS
     // display speed and direction
-    if(clockwise){
-      printf("clockwise at %f", speed);
+    if (clockwise) {
+      printf("clockwise at %f rev/s %d \n", speed, timer_count);
+    } else if(!clockwise) {
+      printf("counter-clockwise at %f rev/s %d \n", speed, timer_count);
     }
-    else {
-      printf("counter-clockwise at %f", speed);
-    }
-    //delay here?
+    else {printf("you have an error...%d \n", timer_count);}
+    // delay here?
+    //delay_millis(TIM2, 500); //delay for half a second
   }
 }
 
+/*********************************************************************
+ *
+ *       EXTI2_IRQHandler()
+ *
+ *  Function description
+ *   Application entry point.
+ */
+
+// TODO: IRQ handler: if interrupt triggered, increment counter
+void EXTI1_IRQHandler(void) {
+
+  int A = digitalRead(SIGNAL_A);
+  int B = digitalRead(SIGNAL_B);
+  
+  if (EXTI->PR1 & (1 << EXTI1_IRQn)) {    // TODO: check interrupt. CORRECT?
+    // If so, clear the interrupt (NB: Write 1 to reset.)
+    EXTI->PR1 |= (1 << EXTI1_IRQn);
+    // TODO: assign clockwise/counterclockwise
+    clockwise = (A && B) || (!A && !B);
+    // Then increment counter
+    counter = counter + 1;
+  }
+
+  if (counter == (TOT_ROT*4)) {
+    // check timer value and reset timer
+    timer_count = TIMER->CNT;    // get value of timer
+    TIMER->CNT  = 0;
+    TIMER->EGR |= (1 << 0);
+  }
+
+}
+
 void EXTI2_IRQHandler(void) {
+
   int A = digitalRead(SIGNAL_A);
   int B = digitalRead(SIGNAL_B);
 
   if (EXTI->PR1 & (1 << EXTI2_IRQn)) {    // TODO: check interrupt. CORRECT?
     // If so, clear the interrupt (NB: Write 1 to reset.)
     EXTI->PR1 |= (1 << EXTI2_IRQn);
-    // TODO: assign clockwise/counterclockwise
-    clockwise = (A && B) || (!A && !B);
-  }
-  if (EXTI->PR1 & (1 << EXTI3_IRQn)) {    // TODO: check interrupt. CORRECT?
-    // If so, clear the interrupt (NB: Write 1 to reset.)
-    EXTI->PR1 |= (1 << EXTI3_IRQn);
-    clockwise = !((A && B) || (!A && !B));
+    clockwise = !((A && B) || (!A && !B)); //assign counter clockwise
+    // Then increment counter
+    counter = counter + 1;
   }
 
-  counter = counter + 1;
 
-  if (counter == TOT_ROT) {
+  if (counter == (TOT_ROT*4)) { //TODO: is it total signals * 4
     // check timer value and reset timer
     timer_count = TIMER->CNT;    // get value of timer
     TIMER->CNT  = 0;
     TIMER->EGR |= (1 << 0);
   }
+
 }
 
-void EXTI3_IRQHandler(void) {
-  if (EXTI->PR1 & (1 << EXTI3_IRQn)) {    // TODO: check interrupt. CORRECT?
-    // If so, clear the interrupt (NB: Write 1 to reset.)
-    EXTI->PR1 |= (1 << EXTI3_IRQn);
-  }
-  counter = counter + 1;
-  // TODO: check if counter is at 120 here?? probably..
-}
 
-uint32_t velocity_calc(int count, int time) {}
+
 /*************************** End of file ****************************/
 
 /*

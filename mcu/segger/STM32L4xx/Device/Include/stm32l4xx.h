@@ -67,7 +67,7 @@
   /* #define STM32L412xx */   /*!< STM32L412xx Devices */
   /* #define STM32L422xx */   /*!< STM32L422xx Devices */
   /* #define STM32L431xx */   /*!< STM32L431xx Devices */
-  /* #define STM32L432xx */   /*!< STM32L432xx Devices */
+   #define STM32L432xx   /*!< STM32L432xx Devices */
   /* #define STM32L433xx */   /*!< STM32L433xx Devices */
   /* #define STM32L442xx */   /*!< STM32L442xx Devices */
   /* #define STM32L443xx */   /*!< STM32L443xx Devices */
