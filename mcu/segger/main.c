@@ -12,20 +12,7 @@ Email   : wchan@g.hmc.edu
 Date    : October 2025
 
 */
-
-#include <stdio.h>
-// TODO: include all necessary header files
-#include "STM32L432KC.h"
-#include <stm32l432xx.h>
-
-#define SIGNAL_A PA1    // A1
-#define SIGNAL_B PA2    // A7
-#define TOT_ROT 408     // PPR (total number of pulses to make 1 rotation)
-#define TIMER TIM6
-
-int counter     = 0;
-int clockwise   = 0;
-int timer_count = 1;
+#include "main.h"
 
 // Function used by printf to send characters to the laptop
 int _write(int file, char *ptr, int len) {
@@ -44,7 +31,6 @@ int _write(int file, char *ptr, int len) {
  *   Application entry point.
  */
 int main(void) {
-
   counter = 0;    // initialize counter to 0
 
   // enable pins
@@ -58,8 +44,8 @@ int main(void) {
   // TODO: which timer do I want enabled?
   RCC->APB1ENR1 |= RCC_APB1ENR1_TIM6EN;
   RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
-  initTIM(TIMER); //initialized to run in milliseconds
-  initTIM(TIM2); 
+  initTIM(TIMER);    // initialized to run in milliseconds
+  initTIM(TIM2);
 
   // 1. Enable SYSCFG clock domain in RCC
   RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
@@ -68,10 +54,10 @@ int main(void) {
   SYSCFG->EXTICR[1] |= _VAL2FLD(SYSCFG_EXTICR1_EXTI1, 0b000);    // Select PA1
   SYSCFG->EXTICR[1] |= _VAL2FLD(SYSCFG_EXTICR1_EXTI2, 0b000);    // Select PA2
 
-  __enable_irq(); // Enable interrupts globally
+  __enable_irq();                                                // Enable interrupts globally
 
   // configure mask bit
-  EXTI->IMR1 |= (1 << gpioPinOffset(SIGNAL_A)); 
+  EXTI->IMR1 |= (1 << gpioPinOffset(SIGNAL_A));
   EXTI->IMR1 |= (1 << gpioPinOffset(SIGNAL_B));
 
   //  enable rising edge trigger for both
@@ -84,23 +70,35 @@ int main(void) {
 
   // turn on EXTI1 and EXTI2 interrupt in NVIC_ISER
   // TODO: is this correct?
-  NVIC->ISER[0] |= (1 << EXTI1_IRQn);    // SEND BOTH TO THE SAME INTERRUPT HANDLER
+  NVIC->ISER[0] |= (1 << EXTI1_IRQn);    // SEND BOTH TO THE SAME INTERRUPT HANDLER?
   NVIC->ISER[0] |= (1 << EXTI2_IRQn);
 
-  float speed = 0;
   while (1) {
-    printf("hello");
     // calculate speed using whatever value is in timer
-    speed = 1.0 / (TOT_ROT * ((4.0 * timer_count *1000.0)));    // TODO: ADJUST SPEED CALCS
+    if (TIMER->CNT >= 200) {
+      if (counter == 0) {
+        speed = 0.0;
+      } else {
+      // # pings * 1 rev/# pings / duration (s) = rev/s
+        speed = counter * (0.25) * (1000.0/TIMER->CNT) *(1.0/PPR); // TODO: ADJUST SPEED CALCS
+      }
+      //reset counters
+      TIMER->CNT  = 0;
+      TIMER->EGR |= (1 << 0);
+      counter = 0;                 // reset counter
+    }    
     // display speed and direction
     if (clockwise) {
-      printf("clockwise at %f rev/s %d \n", speed, timer_count);
-    } else if(!clockwise) {
-      printf("counter-clockwise at %f rev/s %d \n", speed, timer_count);
+      printf("clockwise at ");
+      printf("%f  ", speed);
+      printf("rev/s\n");    //, timer_count);
+    } else if (!clockwise) {
+      printf("counter-clockwise at %f rev/s \n", speed);
+    } else {
+      printf("you have an error...%d \n", timer_count);
     }
-    else {printf("you have an error...%d \n", timer_count);}
-    // delay here?
-    //delay_millis(TIM2, 500); //delay for half a second
+
+    //delay_millis(TIM2, 100);    // delay for half a second
   }
 }
 
@@ -113,88 +111,44 @@ int main(void) {
  */
 
 // TODO: IRQ handler: if interrupt triggered, increment counter
-void EXTI1_IRQHandler(void) {
-
+void EXTI1_IRQHandler(void) {    // interrupt for signal A
   int A = digitalRead(SIGNAL_A);
   int B = digitalRead(SIGNAL_B);
-  
-  if (EXTI->PR1 & (1 << EXTI1_IRQn)) {    // TODO: check interrupt. CORRECT?
-    // If so, clear the interrupt (NB: Write 1 to reset.)
+
+  //if (EXTI->PR1 & (1 << EXTI1_IRQn)) {    // TODO: check interrupt. CORRECT?
+  if(1){
+    //  If so, clear the interrupt (NB: Write 1 to reset.)
     EXTI->PR1 |= (1 << EXTI1_IRQn);
     // TODO: assign clockwise/counterclockwise
-    clockwise = (A && B) || (!A && !B);
+    clockwise = !((A && B) || (!A && !B));
     // Then increment counter
     counter = counter + 1;
   }
-
-  if (counter == (TOT_ROT*4)) {
-    // check timer value and reset timer
-    timer_count = TIMER->CNT;    // get value of timer
-    TIMER->CNT  = 0;
-    TIMER->EGR |= (1 << 0);
-  }
-
 }
 
-void EXTI2_IRQHandler(void) {
-
+void EXTI2_IRQHandler(void) {    // interrupt for signal B
   int A = digitalRead(SIGNAL_A);
-  int B = digitalRead(SIGNAL_B);
+  int B = digitalRead(SIGNAL_B); // we do reach this point
 
-  if (EXTI->PR1 & (1 << EXTI2_IRQn)) {    // TODO: check interrupt. CORRECT?
+  //if (EXTI->PR1 & (1 << EXTI2_IRQn)) {    // TODO:i don't know if this ever gets triggered
+  if (1) {
     // If so, clear the interrupt (NB: Write 1 to reset.)
     EXTI->PR1 |= (1 << EXTI2_IRQn);
-    clockwise = !((A && B) || (!A && !B)); //assign counter clockwise
+    clockwise = ((A && B) || (!A && !B));    // assign counter clockwise
     // Then increment counter
     counter = counter + 1;
   }
-
-
-  if (counter == (TOT_ROT*4)) { //TODO: is it total signals * 4
-    // check timer value and reset timer
-    timer_count = TIMER->CNT;    // get value of timer
-    TIMER->CNT  = 0;
-    TIMER->EGR |= (1 << 0);
-  }
-
 }
-
-
 
 /*************************** End of file ****************************/
 
 /*
 //TODO: my questions
 
-what does the algorithm look like?
-how exactly does this work with interrupts?
-only need 1 counter to increment on each edge?
-how does the timer work with all of this? does the timer stop counting when an interrupt happen?
-what is a mask and why is it important?
-per the button_interrupt code: where does the interupt
-  handler get called? is it automatic based on the name of the function?
-
-
-2 separate functions: interrupt starts on rising edge until falling edge and count the time. also count time between
-rising edge 1 and rising edge 2 (2nd sensor)
-
-2 sensors attached to 2 pins
-
-
-interrupt is essentially a trigger that alerts the main code to do something else
-
-
-timer happens outside of mcu
-2 options:
-1. count for x amount of time, then use the counter # as ur variable
-  configure timer as an interrupt
-2. count until the full amount of pulses per rotation (kavi says 120), then use the timer val to calculate velocity
-
-
-you DO have to worry about direction
-rising edge A, b is high, moving forward. and vice versa
-rising edge A, b is low, moving backwards
-truth table?
+two main issues:
+1. my counter isn't incrementing. does my condition ever get triggered?
+could it be i'm not connected to my pins correctly?
+2. speed is not printing?
 
 
 */
