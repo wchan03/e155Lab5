@@ -1,5 +1,14 @@
 //header for main.c
 
+/*
+
+File    : main.h
+Purpose : Lab 5 Main Code Header File
+Author  : Wava Chan
+Email   : wchan@g.hmc.edu
+Date    : October 2025
+*/
+
 #ifndef MAIN_H
 #define MAIN_H
 
@@ -9,6 +18,7 @@
 
 #define SIGNAL_A PA1    // A1
 #define SIGNAL_B PA2    // A7
+#define TEST_PIN PA3    //A2
 #define PPR 408     // PPR (total number of pulses to make 1 rotation)
 #define TIMER TIM6
 #define duration 500
